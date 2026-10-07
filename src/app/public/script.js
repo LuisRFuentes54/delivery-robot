@@ -20,6 +20,14 @@ const MAPA_BASE = [
 
 const ORIENTACIONES = ['NORTE', 'ESTE', 'SUR', 'OESTE'];
 const ICONOS_ROBOT = { NORTE: '🤖⬆️', ESTE: '🤖➡️', SUR: '🤖⬇️', OESTE: '🤖⬅️' };
+const ICONOS_COMANDO = {
+  AVANZAR: '⬆️',
+  GIRAR_IZQ: '↺',
+  GIRAR_DER: '↻',
+  RECOGER: '🪪',
+  RECOGER_LLAVE: '🔑',
+  ABRIR_PUERTA: '🚪'
+};
 
 // Estado inicial
 let estado = {
@@ -35,6 +43,8 @@ let estado = {
 let programa = [];
 let pasoActualIndex = 0;
 let ejecucionInterval = null;
+let errorStepIndex = null;
+let draggedIndex = null;
 
 // Elementos del DOM
 const gridElement = document.getElementById('grid-tablero');
@@ -98,27 +108,203 @@ function setFeedback(tipo, mensaje) {
 
 function agregarComando(tipo) {
   if (estado.enEjecucion) return;
+  errorStepIndex = null;
   programa.push(tipo);
   actualizarListaUI();
+
+  // Desplazar la lista al final para mostrar la instrucción agregada
+  requestAnimationFrame(() => {
+    listaElement.scrollTop = listaElement.scrollHeight;
+  });
 }
 
 function limpiarPrograma() {
   if (estado.enEjecucion) return;
   programa = [];
   pasoActualIndex = 0;
+  errorStepIndex = null;
   actualizarListaUI();
   reiniciarSimulacion();
 }
 
+function moverComando(index, direccion) {
+  if (estado.enEjecucion) return;
+  const nuevoIndex = index + direccion;
+  if (nuevoIndex < 0 || nuevoIndex >= programa.length) return;
+
+  const temp = programa[index];
+  programa[index] = programa[nuevoIndex];
+  programa[nuevoIndex] = temp;
+
+  errorStepIndex = null;
+  if (pasoActualIndex > 0) {
+    reiniciarSimulacion();
+  } else {
+    actualizarListaUI();
+  }
+}
+
+function eliminarComando(index) {
+  if (estado.enEjecucion) return;
+  if (index < 0 || index >= programa.length) return;
+
+  programa.splice(index, 1);
+
+  errorStepIndex = null;
+  if (pasoActualIndex > 0) {
+    reiniciarSimulacion();
+  } else {
+    actualizarListaUI();
+  }
+}
+
+function reordenarComando(desdeIndex, hastaIndex) {
+  if (estado.enEjecucion) return;
+  if (desdeIndex < 0 || desdeIndex >= programa.length) return;
+  if (hastaIndex < 0 || hastaIndex >= programa.length) return;
+  if (desdeIndex === hastaIndex) return;
+
+  const [elemento] = programa.splice(desdeIndex, 1);
+  programa.splice(hastaIndex, 0, elemento);
+
+  errorStepIndex = null;
+  if (pasoActualIndex > 0) {
+    reiniciarSimulacion();
+  } else {
+    actualizarListaUI();
+  }
+}
+
 function actualizarListaUI() {
   listaElement.innerHTML = '';
+
+  if (programa.length === 0) {
+    const emptyLi = document.createElement('li');
+    emptyLi.className = 'instruction-empty';
+    emptyLi.textContent = 'Sin instrucciones añadidas. Selecciona los comandos superiores para armar el programa.';
+    listaElement.appendChild(emptyLi);
+    valPasoActual.textContent = `0 / 0`;
+    return;
+  }
+
   programa.forEach((cmd, idx) => {
     const li = document.createElement('li');
-    li.classList.add('instruction-item');
-    if (idx === pasoActualIndex - 1) li.classList.add('activo');
-    li.textContent = cmd.replace(/_/g, ' ');
+    li.className = 'instruction-item';
+
+    if (idx === errorStepIndex) {
+      li.classList.add('error');
+    } else if (idx === pasoActualIndex - 1) {
+      li.classList.add('activo');
+      // Asegurar que el paso en ejecución sea visible con scroll
+      requestAnimationFrame(() => {
+        li.scrollIntoView({ block: 'nearest', behavior: 'smooth' });
+      });
+    }
+
+    // Soporte para Drag & Drop (reordenar arrastrando)
+    li.draggable = !estado.enEjecucion;
+    li.addEventListener('dragstart', (e) => {
+      if (estado.enEjecucion) {
+        e.preventDefault();
+        return;
+      }
+      draggedIndex = idx;
+      e.dataTransfer.effectAllowed = 'move';
+      li.classList.add('dragging');
+    });
+
+    li.addEventListener('dragover', (e) => {
+      e.preventDefault();
+      e.dataTransfer.dropEffect = 'move';
+      li.classList.add('drag-over');
+    });
+
+    li.addEventListener('dragleave', () => {
+      li.classList.remove('drag-over');
+    });
+
+    li.addEventListener('drop', (e) => {
+      e.preventDefault();
+      li.classList.remove('drag-over');
+      if (draggedIndex !== null && draggedIndex !== idx) {
+        reordenarComando(draggedIndex, idx);
+      }
+    });
+
+    li.addEventListener('dragend', () => {
+      li.classList.remove('dragging');
+      draggedIndex = null;
+    });
+
+    // Contenido del paso: número, icono y nombre del comando
+    const contentDiv = document.createElement('div');
+    contentDiv.className = 'instruction-content';
+
+    const numSpan = document.createElement('span');
+    numSpan.className = 'step-number';
+    numSpan.textContent = `${idx + 1}.`;
+
+    const iconSpan = document.createElement('span');
+    iconSpan.className = 'step-icon';
+    iconSpan.textContent = ICONOS_COMANDO[cmd] || '🔹';
+
+    const nameSpan = document.createElement('span');
+    nameSpan.className = 'step-name';
+    nameSpan.textContent = cmd.replace(/_/g, ' ');
+
+    contentDiv.appendChild(numSpan);
+    contentDiv.appendChild(iconSpan);
+    contentDiv.appendChild(nameSpan);
+
+    // Acciones del paso: Subir (▲), Bajar (▼), Eliminar (✕)
+    const actionsDiv = document.createElement('div');
+    actionsDiv.className = 'instruction-actions';
+
+    const btnUp = document.createElement('button');
+    btnUp.type = 'button';
+    btnUp.className = 'btn-step-action';
+    btnUp.title = 'Subir instrucción en la secuencia';
+    btnUp.setAttribute('aria-label', `Subir instrucción ${idx + 1}`);
+    btnUp.innerHTML = '▲';
+    btnUp.disabled = estado.enEjecucion || idx === 0;
+    btnUp.onclick = (e) => {
+      e.stopPropagation();
+      moverComando(idx, -1);
+    };
+
+    const btnDown = document.createElement('button');
+    btnDown.type = 'button';
+    btnDown.className = 'btn-step-action';
+    btnDown.title = 'Bajar instrucción en la secuencia';
+    btnDown.setAttribute('aria-label', `Bajar instrucción ${idx + 1}`);
+    btnDown.innerHTML = '▼';
+    btnDown.disabled = estado.enEjecucion || idx === programa.length - 1;
+    btnDown.onclick = (e) => {
+      e.stopPropagation();
+      moverComando(idx, 1);
+    };
+
+    const btnDelete = document.createElement('button');
+    btnDelete.type = 'button';
+    btnDelete.className = 'btn-step-action btn-delete';
+    btnDelete.title = 'Eliminar instrucción';
+    btnDelete.setAttribute('aria-label', `Eliminar instrucción ${idx + 1}`);
+    btnDelete.innerHTML = '✕';
+    btnDelete.disabled = estado.enEjecucion;
+    btnDelete.onclick = (e) => {
+      e.stopPropagation();
+      eliminarComando(idx);
+    };
+
+    actionsDiv.appendChild(btnUp);
+    actionsDiv.appendChild(btnDown);
+    actionsDiv.appendChild(btnDelete);
+
+    li.appendChild(contentDiv);
+    li.appendChild(actionsDiv);
     listaElement.appendChild(li);
   });
+
   valPasoActual.textContent = `${pasoActualIndex} / ${programa.length}`;
 }
 
@@ -134,6 +320,7 @@ function reiniciarSimulacion() {
     enEjecucion: false
   };
   pasoActualIndex = 0;
+  errorStepIndex = null;
   setFeedback('info', 'Tablero reiniciado. Listo para probar la lógica.');
   renderTablero();
   actualizarListaUI();
@@ -255,11 +442,9 @@ function ejecutarSiguientePaso() {
 function marcarFallo(mensaje) {
   clearInterval(ejecucionInterval);
   estado.enEjecucion = false;
+  errorStepIndex = pasoActualIndex - 1;
   setFeedback('error', mensaje);
-  const items = listaElement.getElementsByTagName('li');
-  if (items[pasoActualIndex - 1]) {
-    items[pasoActualIndex - 1].classList.add('error');
-  }
+  actualizarListaUI();
 }
 
 function verificarVictoria() {
@@ -269,20 +454,24 @@ function verificarVictoria() {
   } else {
     setFeedback('info', 'El programa finalizó, pero el robot no llegó a la meta.');
   }
+  actualizarListaUI();
 }
 
 function ejecutarPrograma() {
   if (estado.enEjecucion || programa.length === 0) return;
   reiniciarSimulacion();
   estado.enEjecucion = true;
+  actualizarListaUI();
   ejecucionInterval = setInterval(() => {
     const continuar = ejecutarSiguientePaso();
     if (!continuar) {
       clearInterval(ejecucionInterval);
       estado.enEjecucion = false;
+      actualizarListaUI();
     }
   }, 600);
 }
 
 // Render inicial
 renderTablero();
+actualizarListaUI();
