@@ -443,6 +443,18 @@ body {
   box-shadow: 0 0 10px rgba(59, 130, 246, 0.4);
 }
 
+.cell.goal {
+  background-color: rgba(16, 185, 129, 0.15);
+  border-color: rgba(16, 185, 129, 0.5);
+  box-shadow: 0 0 8px rgba(16, 185, 129, 0.2);
+}
+
+.cell.item-carnet,
+.cell.item-llave {
+  background-color: rgba(234, 179, 8, 0.08);
+  border-color: rgba(234, 179, 8, 0.25);
+}
+
 .feedback-panel {
   width: 100%;
   display: flex;

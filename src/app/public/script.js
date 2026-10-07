@@ -8,15 +8,67 @@ const TipoCelda = Object.freeze({
   META: 'META'
 });
 
-// Definición del mundo (6x6) utilizando el enum TipoCelda
-const MAPA_BASE = [
+// Función para crear una matriz reactiva que detecta modificaciones (incluso desde la consola de Inspeccionar)
+function crearMapaReactivo(matriz) {
+  const handlerFila = {
+    set(target, prop, value) {
+      // Normalizar strings a mayúsculas si coinciden con las claves de TipoCelda
+      if (typeof value === 'string') {
+        const mayus = value.toUpperCase();
+        if (TipoCelda[mayus]) {
+          value = TipoCelda[mayus];
+        }
+      }
+      target[prop] = value;
+      // Re-renderizar automáticamente la vista del tablero
+      if (typeof renderTablero === 'function') {
+        renderTablero();
+      }
+      return true;
+    }
+  };
+
+  const filasConProxy = matriz.map(fila => new Proxy(fila, handlerFila));
+
+  const handlerMatriz = {
+    set(target, prop, value) {
+      if (Array.isArray(value)) {
+        target[prop] = new Proxy(value, handlerFila);
+      } else {
+        target[prop] = value;
+      }
+      if (typeof renderTablero === 'function') {
+        renderTablero();
+      }
+      return true;
+    }
+  };
+
+  return new Proxy(filasConProxy, handlerMatriz);
+}
+
+// Función para crear un objeto de estado reactivo
+function crearEstadoReactivo(estadoInicial) {
+  return new Proxy(estadoInicial, {
+    set(target, prop, value) {
+      target[prop] = value;
+      if (typeof renderTablero === 'function') {
+        renderTablero();
+      }
+      return true;
+    }
+  });
+}
+
+// Definición reactiva del mundo (6x6) utilizando el enum TipoCelda
+let MAPA_BASE = crearMapaReactivo([
   [TipoCelda.VACIO, TipoCelda.VACIO, TipoCelda.PARED, TipoCelda.VACIO, TipoCelda.PARED, TipoCelda.META],
   [TipoCelda.VACIO, TipoCelda.VACIO, TipoCelda.PARED, TipoCelda.VACIO, TipoCelda.PUERTA, TipoCelda.VACIO],
   [TipoCelda.VACIO, TipoCelda.VACIO, TipoCelda.PARED, TipoCelda.VACIO, TipoCelda.PARED, TipoCelda.PARED],
   [TipoCelda.VACIO, TipoCelda.VACIO, TipoCelda.VACIO, TipoCelda.VACIO, TipoCelda.PARED, TipoCelda.VACIO],
   [TipoCelda.PARED, TipoCelda.PARED, TipoCelda.VACIO, TipoCelda.PARED, TipoCelda.PARED, TipoCelda.CARNET],
   [TipoCelda.LLAVE, TipoCelda.VACIO, TipoCelda.VACIO, TipoCelda.VACIO, TipoCelda.VACIO, TipoCelda.VACIO]
-];
+]);
 
 const ORIENTACIONES = ['NORTE', 'ESTE', 'SUR', 'OESTE'];
 const ICONOS_ROBOT = { NORTE: '🤖⬆️', ESTE: '🤖➡️', SUR: '🤖⬇️', OESTE: '🤖⬅️' };
@@ -29,8 +81,8 @@ const ICONOS_COMANDO = {
   ABRIR_PUERTA: '🚪'
 };
 
-// Estado inicial
-let estado = {
+// Estado inicial reactivo
+let estado = crearEstadoReactivo({
   x: 0,
   y: 0,
   orientacionIndex: 1, // Comienza mirando al ESTE
@@ -38,7 +90,7 @@ let estado = {
   tieneLlave: false,
   puertaAbierta: false,
   enEjecucion: false
-};
+});
 
 let programa = [];
 let pasoActualIndex = 0;
@@ -58,6 +110,7 @@ const feedbackIcon = document.getElementById('feedback-icon');
 const feedbackPanel = document.getElementById('feedback-panel');
 
 function renderTablero() {
+  if (!gridElement) return;
   gridElement.innerHTML = '';
   for (let r = 0; r < 6; r++) {
     for (let c = 0; c < 6; c++) {
@@ -72,8 +125,10 @@ function renderTablero() {
         cell.classList.add('wall');
         cell.textContent = '🧱';
       } else if (tipo === TipoCelda.CARNET) {
+        if (!estado.tieneCarnet) cell.classList.add('item-carnet');
         cell.textContent = estado.tieneCarnet ? '' : '🪪';
       } else if (tipo === TipoCelda.LLAVE) {
+        if (!estado.tieneLlave) cell.classList.add('item-llave');
         cell.textContent = estado.tieneLlave ? '' : '🔑';
       } else if (tipo === TipoCelda.PUERTA) {
         cell.classList.add('door');
@@ -84,23 +139,27 @@ function renderTablero() {
           cell.textContent = '🚪';
         }
       } else if (tipo === TipoCelda.META) {
+        cell.classList.add('goal');
         cell.textContent = '🎯';
       }
       gridElement.appendChild(cell);
     }
   }
 
-  valOrientacion.textContent = ORIENTACIONES[estado.orientacionIndex];
-  valCarnet.textContent = estado.tieneCarnet ? 'Sí' : 'No';
-  valCarnet.className = `status-badge ${estado.tieneCarnet}`;
+  if (valOrientacion) valOrientacion.textContent = ORIENTACIONES[estado.orientacionIndex];
+  if (valCarnet) {
+    valCarnet.textContent = estado.tieneCarnet ? 'Sí' : 'No';
+    valCarnet.className = `status-badge ${estado.tieneCarnet}`;
+  }
   if (valLlave) {
     valLlave.textContent = estado.tieneLlave ? 'Sí' : 'No';
     valLlave.className = `status-badge ${estado.tieneLlave}`;
   }
-  valPasoActual.textContent = `${pasoActualIndex} / ${programa.length}`;
+  if (valPasoActual) valPasoActual.textContent = `${pasoActualIndex} / ${programa.length}`;
 }
 
 function setFeedback(tipo, mensaje) {
+  if (!feedbackPanel) return;
   feedbackPanel.className = `feedback-panel ${tipo}`;
   feedbackIcon.textContent = tipo === 'error' ? '❌' : (tipo === 'success' ? '🎉' : '💡');
   feedbackText.textContent = mensaje;
@@ -176,6 +235,7 @@ function reordenarComando(desdeIndex, hastaIndex) {
 }
 
 function actualizarListaUI() {
+  if (!listaElement) return;
   listaElement.innerHTML = '';
 
   if (programa.length === 0) {
@@ -183,7 +243,7 @@ function actualizarListaUI() {
     emptyLi.className = 'instruction-empty';
     emptyLi.textContent = 'Sin instrucciones añadidas. Selecciona los comandos superiores para armar el programa.';
     listaElement.appendChild(emptyLi);
-    valPasoActual.textContent = `0 / 0`;
+    if (valPasoActual) valPasoActual.textContent = `0 / 0`;
     return;
   }
 
@@ -305,20 +365,19 @@ function actualizarListaUI() {
     listaElement.appendChild(li);
   });
 
-  valPasoActual.textContent = `${pasoActualIndex} / ${programa.length}`;
+  if (valPasoActual) valPasoActual.textContent = `${pasoActualIndex} / ${programa.length}`;
 }
 
 function reiniciarSimulacion() {
   clearInterval(ejecucionInterval);
-  estado = {
-    x: 0,
-    y: 0,
-    orientacionIndex: 1,
-    tieneCarnet: false,
-    tieneLlave: false,
-    puertaAbierta: false,
-    enEjecucion: false
-  };
+  estado.x = 0;
+  estado.y = 0;
+  estado.orientacionIndex = 1;
+  estado.tieneCarnet = false;
+  estado.tieneLlave = false;
+  estado.puertaAbierta = false;
+  estado.enEjecucion = false;
+
   pasoActualIndex = 0;
   errorStepIndex = null;
   setFeedback('info', 'Tablero reiniciado. Listo para probar la lógica.');
@@ -471,6 +530,19 @@ function ejecutarPrograma() {
     }
   }, 600);
 }
+
+// Exponer en window para habilitar manipulación interactiva desde la consola de Inspeccionar
+window.MAPA_BASE = MAPA_BASE;
+window.TipoCelda = TipoCelda;
+window.estado = estado;
+window.renderTablero = renderTablero;
+window.reiniciarSimulacion = reiniciarSimulacion;
+window.agregarComando = agregarComando;
+window.ejecutarPrograma = ejecutarPrograma;
+window.ejecutarSiguientePaso = ejecutarSiguientePaso;
+window.limpiarPrograma = limpiarPrograma;
+window.moverComando = moverComando;
+window.eliminarComando = eliminarComando;
 
 // Render inicial
 renderTablero();
