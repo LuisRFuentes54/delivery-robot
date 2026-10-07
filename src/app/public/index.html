@@ -1,0 +1,77 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Simulador de Algoritmos - El Robot Universitario</title>
+  <link rel="stylesheet" href="styles.css">
+</head>
+<body>
+  <div class="app-container">
+    <header class="app-header">
+      <h1>Pensamiento Algorítmico: El Robot Universitario</h1>
+      <p>Construye la secuencia de pasos lógica para llevar la solicitud al laboratorio.</p>
+    </header>
+
+    <main class="main-layout">
+      <!-- Panel de Control y Bloques -->
+      <section class="toolbox-panel">
+        <h2>Instrucciones Disponibles</h2>
+        <div class="command-buttons">
+          <button class="btn btn-cmd" onclick="agregarComando('AVANZAR')">⬆️ Avanzar 1 paso</button>
+          <button class="btn btn-cmd" onclick="agregarComando('ABRIR_PUERTA')">🚪 Cruzar Puerta</button>
+          <button class="btn btn-cmd" onclick="agregarComando('GIRAR_IZQ')">↺ Girar Izquierda</button>
+          <button class="btn btn-cmd" onclick="agregarComando('GIRAR_DER')">↻ Girar Derecha</button>
+          <button class="btn btn-cmd" onclick="agregarComando('RECOGER')">🪪 Recoger Carnet</button>
+          <button class="btn btn-cmd" onclick="agregarComando('RECOGER_LLAVE')">🔑 Recoger Llave</button>
+        </div>
+
+        <div class="program-queue">
+          <div class="queue-header">
+            <h3>Programa (Secuencia de Pasos)</h3>
+            <button class="btn btn-text" onclick="limpiarPrograma()">Borrar todo</button>
+          </div>
+          <ol id="lista-instrucciones" class="instruction-list">
+            <!-- Pasos agregados dinámicamente -->
+          </ol>
+        </div>
+
+        <div class="execution-controls">
+          <button id="btn-ejecutar" class="btn btn-primary" onclick="ejecutarPrograma()">▶ Ejecutar Todo</button>
+          <button id="btn-paso" class="btn btn-secondary" onclick="ejecutarSiguientePaso()">⏭ Paso a Paso</button>
+          <button id="btn-reiniciar" class="btn btn-outline" onclick="reiniciarSimulacion()">🔄 Reiniciar Tablero</button>
+        </div>
+      </section>
+
+      <!-- Panel Central: Tablero y Feedback -->
+      <section class="board-panel">
+        <div class="status-bar">
+          <div class="status-item">
+            <span>Orientación:</span> <strong id="val-orientacion">ESTE (➡️)</strong>
+          </div>
+          <div class="status-item">
+            <span>¿Tiene Carnet?:</span> <strong id="val-carnet" class="status-badge false">No</strong>
+          </div>
+          <div class="status-item">
+            <span>¿Tiene Llave?:</span> <strong id="val-llave" class="status-badge false">No</strong>
+          </div>
+          <div class="status-item">
+            <span>Paso Actual:</span> <strong id="val-paso-actual">0 / 0</strong>
+          </div>
+        </div>
+
+        <div id="grid-tablero" class="grid-tablero">
+          <!-- Celdas generadas por JS -->
+        </div>
+
+        <div id="feedback-panel" class="feedback-panel">
+          <span id="feedback-icon">💡</span>
+          <p id="feedback-text">Agrega instrucciones a la lista y presiona "Ejecutar" o "Paso a Paso" para probar tu lógica.</p>
+        </div>
+      </section>
+    </main>
+  </div>
+
+  <script src="script.js"></script>
+</body>
+</html>
